@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     error,
     fmt::Display,
     fs::File,
@@ -7,6 +6,8 @@ use std::{
     path::Path,
     result,
 };
+
+use rustc_hash::{FxBuildHasher, FxHashSet};
 
 #[non_exhaustive]
 #[derive(Debug)]
@@ -43,7 +44,7 @@ impl error::Error for LabParseError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Vec2(pub usize, pub usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     Up,
     Down,
@@ -75,12 +76,12 @@ impl Direction {
 
 #[derive(Debug)]
 pub struct Lab {
-    pub obstacle_positions: HashSet<Vec2>,
+    pub obstacle_positions: FxHashSet<Vec2>,
     pub dimensions: Vec2,
 }
 
 impl Lab {
-    pub fn new(obstacle_positions: HashSet<Vec2>, dimensions: Vec2) -> Self {
+    pub fn new(obstacle_positions: FxHashSet<Vec2>, dimensions: Vec2) -> Self {
         Self {
             obstacle_positions,
             dimensions,
@@ -94,7 +95,7 @@ impl Lab {
 
 /// Parses the specified file as a lab.
 ///
-/// Returns `Ok(lab, guard_position)` on success.
+/// Returns `Ok(guard_position, lab)` on success.
 pub fn parse_lab(filename: impl AsRef<Path>) -> Result<(Vec2, Lab)> {
     let mut line_buf = Vec::new();
     let mut input = BufReader::new(File::open(filename)?);
@@ -102,7 +103,7 @@ pub fn parse_lab(filename: impl AsRef<Path>) -> Result<(Vec2, Lab)> {
     let mut lab_width = 0;
     let mut lab_height = 0;
     let mut guard_position = None;
-    let mut obstacle_positions: HashSet<Vec2> = HashSet::with_capacity(64);
+    let mut obstacle_positions: FxHashSet<Vec2> = FxHashSet::with_capacity_and_hasher(64, FxBuildHasher);
 
     for y_position in 0usize.. {
         line_buf.clear();
