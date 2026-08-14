@@ -1,5 +1,5 @@
-use std::collections::HashSet;
+use day10::CountingMethod;
 
 fn main() -> anyhow::Result<()> {
-    day10::run::<HashSet<_>>()
+    day10::run(CountingMethod::StartEnd)
 }

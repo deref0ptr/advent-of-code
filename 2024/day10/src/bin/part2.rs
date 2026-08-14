@@ -1,5 +1,5 @@
-use smallvec::SmallVec;
+use day10::CountingMethod;
 
 fn main() -> anyhow::Result<()> {
-    day10::run::<SmallVec<[_; 4]>>()
+    day10::run(CountingMethod::UniqueRoute)
 }

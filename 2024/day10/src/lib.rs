@@ -1,7 +1,14 @@
-use std::{cmp, collections::HashMap, hash::Hash, io::{self, BufRead}, ops::Mul};
+use std::{
+    cmp,
+    collections::{HashMap, HashSet},
+    env,
+    hash::Hash,
+    io::{self, BufRead},
+    ops::Mul,
+};
 
-use anyhow::ensure;
 use ndarray::Array2;
+use smallvec::SmallVec;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Vec2 {
@@ -39,6 +46,7 @@ where
 {
     type Output = AdjacencyList<T, N>;
 
+    /// This operation is equivalent to matrix multiplication of adjacency matrices.
     fn mul(self, rhs: Self) -> AdjacencyList<T, N> {
         let mut new_adj = AdjacencyList::new();
 
@@ -60,10 +68,11 @@ impl<N: Default + Extend<Vec2>> AdjacencyList<Vec2, N>
 where
     for<'a> &'a N: IntoIterator<Item = &'a Vec2>,
 {
-    pub fn from_world(world: &Array2<u8>) -> anyhow::Result<Self> {
+    /// Construct an adjacency list of positions in the given world map.
+    pub fn from_world(world: &Array2<u8>) -> Self {
         let (height, width) = world.dim();
 
-        ensure!(cmp::max(height, width) < u16::MAX as usize, "World too big");
+        assert!(cmp::max(height, width) < u16::MAX as usize, "World too big");
 
         let (height, width) = (height as u16, width as u16);
 
@@ -75,6 +84,7 @@ where
             for x in 0..width {
                 let (current, current_pos) = indexer(y, x);
 
+                // Don't want to be falling off the edge of the world.
                 if x + 1 < width {
                     let (right, right_pos) = indexer(y, x + 1);
 
@@ -89,6 +99,7 @@ where
                     }
                 }
 
+                // See above.
                 if y + 1 < height {
                     let (down, down_pos) = indexer(y + 1, x);
 
@@ -105,7 +116,7 @@ where
             }
         }
 
-        Ok(adj)
+        adj
     }
 }
 
@@ -133,28 +144,46 @@ pub fn get_map(mut input: impl BufRead) -> anyhow::Result<Array2<u8>> {
     Ok(map)
 }
 
-pub fn run<N>() -> anyhow::Result<()>
+fn calculate<N>(world: &Array2<u8>) -> usize
 where
     N: Default + Extend<Vec2>,
     for<'a> &'a N: IntoIterator<Item = &'a Vec2>,
 {
-    eprintln!("Remember to pipe in the input file!");
+    let l1 = AdjacencyList::<_, N>::from_world(world);
 
-    let world = get_map(io::stdin().lock())?;
-
-    let adj = AdjacencyList::<_, N>::from_world(&world)?;
-
-    let l2 = &adj * &adj;
+    let l2 = &l1 * &l1;
 
     let l4 = &l2 * &l2;
     let l8 = &l4 * &l4;
 
-    let nine_length_routes = &l8 * &adj;
+    let length_9_routes = &l8 * &l1;
 
-    println!(
-        "Sum of trailhead scores: {}",
-        nine_length_routes.vertices().flat_map(|(_, edges)| edges).count()
-    );
+    // Height is in 0..=9, so a length-9 route must go from 0 to 9 height and is therefore a trail.
+    length_9_routes.vertices().flat_map(|(_, edges)| edges).count()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CountingMethod {
+    /// Trails with the same start and end position are considered equal
+    StartEnd,
+    /// Trails with different positions at any point are considered different.
+    UniqueRoute,
+}
+
+pub fn run(method: CountingMethod) -> anyhow::Result<()> {
+    eprintln!("Remember to pipe in the input file!");
+
+    let world = get_map(io::stdin().lock())?;
+
+    let calculate_fn = match method {
+        // Using a hashset ensures that, for a given origin position, another position may appear at most once.
+        CountingMethod::StartEnd => calculate::<HashSet<_>>,
+        // Using a vector means all possible paths are considered; use SmallVec to reduce heap allocations.
+        CountingMethod::UniqueRoute => calculate::<SmallVec<[_; 4]>>,
+    };
+    let score = calculate_fn(&world);
+
+    println!("{bin} score: {score}", bin = env::args().next().unwrap());
 
     Ok(())
 }
